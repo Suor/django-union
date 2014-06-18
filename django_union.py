@@ -28,8 +28,6 @@ class Union(object):
         }
         return map(obj_map.get, rows)
 
-    # TODO: .order_by()
-
     def _union_sql(self, start=None, stop=None):
         sql, params = zip(*map(_sql_with_params, self.querysets))
         sql = ' union all '.join(sql)
@@ -48,11 +46,36 @@ class Union(object):
 
         return sql, params
 
+    ### "Queryset" updating methods
+
+    def _clone(self):
+        clone = self.__class__(*self.querysets)
+        clone.ordering = self.ordering # It's tuple, no need to copy
+        return clone
+
+    def _proxy_method(name):
+        def _method(self, *args, **kwargs):
+            clone = self._clone()
+            clone.querysets = [getattr(qs, name)(*args, **kwargs) for qs in clone.querysets]
+            return clone
+        _method.__name__ = name
+        return _method
+
+    filter = _proxy_method('filter')
+    extra = _proxy_method('extra') # NOTE: order_by not supported
+    select_related = _proxy_method('select_related')
+
+    # NOTE: not really working, posted order is hardcoded for now
+    def order_by(self, *args):
+        clone = self._clone()
+        clone.ordering = args
+        return clone
+
 
 def _sql_with_params(qs):
     opts = qs.model._meta
     model_str = '%s.%s' % (opts.app_label, opts.model_name)
-    qs = qs.extra(select={'model': "'%s'" % model_str}).values('id', 'model', 'posted')
+    qs = qs.extra(select={'model': "'%s'" % model_str}).values('id', 'model', 'posted').order_by()
     return qs.query.sql_with_params()
 
 
