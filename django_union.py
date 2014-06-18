@@ -1,13 +1,17 @@
 from collections import defaultdict
 
 from django.db.models.loading import get_model
+from django.db.models.query import QuerySet
+from django.db.models import Manager
 from handy.db import fetch_all
 
 
 class Union(object):
     def __init__(self, *querysets):
         assert querysets, "Union should be non-empty"
-        self.querysets = querysets
+        self.querysets = tuple(qs if isinstance(qs, (QuerySet, Manager)) else qs.objects
+                               for qs in querysets)
+        self.ordering = None
 
     def count(self):
         return sum(q.count() for q in self.querysets)
